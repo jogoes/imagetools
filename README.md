@@ -26,3 +26,8 @@ val writer = new JpegWriter
 writer.write(targetJpeg, os)
 ```
 
+### TODO
+
+* Image streaming: currently the whole image data is read into memory. A streaming solution would reduce the required memory and basically allow unlimited image sizes. 
+* Support for other formats (e.g. PNG)
+* Support for reading and manipulating tags embedded into the metadata segments (e.g. EXIF) 

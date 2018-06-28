@@ -9,25 +9,21 @@ import com.github.jogoes.imagetools.util.StreamUtils
 import scala.annotation.tailrec
 import scala.util.{Failure, Success, Try}
 
+import StreamUtils._
+
 trait JpegReader {
   def read(in: InputStream): Try[Jpeg]
 }
 
 object JpegReader {
-  def apply() : JpegReader = new JpegInMemoryReader
+  def apply(): JpegReader = new JpegInMemoryReader
 }
 
 class JpegInMemoryReader extends JpegReader {
 
-  def read(is: InputStream): Try[Jpeg] = {
-    for {
-      bytes <- StreamUtils.toByteArray(is)
-      jpeg  <- read(bytes)
-    } yield jpeg
-  }
+  def read(is: InputStream): Try[Jpeg] = toByteArray(is).flatMap(read)
 
-  def read(bytes: Array[Byte]): Try[Jpeg] =
-    readSegments(bytes).map(segments => Jpeg(bytes, segments))
+  def read(bytes: Array[Byte]): Try[Jpeg] = readSegments(bytes).map(segments => Jpeg(bytes, segments))
 
   import Jpeg.Marker._
 
@@ -52,12 +48,13 @@ class JpegInMemoryReader extends JpegReader {
         val header: Marker = Marker(bytes(offset), bytes(offset + 1))
         header match {
           case SOS => Success(segments :+ Sos(bytes, offset, bytes.length - offset))
-          case Marker(t1, t2) if t1 == 0xff.toByte =>
-            val length   = (bytes(offset + 2) & 0xff) * 256 + (bytes(offset + 3) & 0xff)
+          case Marker(Jpeg.Segment.FF, t2) =>
+            // length of segment is stored as high-endian 16-bit integer
+            val length = (bytes(offset + 2) & 0xff) * 256 + (bytes(offset + 3) & 0xff)
             val endPoint = offset + length + 2
             readNextSegment(bytes,
-                            endPoint,
-                            segments :+ Segment(Marker(t2), bytes, offset, length + 2))
+              endPoint,
+              segments :+ Segment(Marker(t2), bytes, offset, length + 2))
           case Marker(t1, t2) =>
             Failure(new IOException(s"Invalid JPEG format: unexpected markers ($t1, $t2) found."))
         }
@@ -65,7 +62,7 @@ class JpegInMemoryReader extends JpegReader {
     }
 
     for {
-      _        <- validate(bytes)
+      _ <- validate(bytes)
       segments <- readNextSegment(bytes, 2, Vector(Soi(bytes, 0, 2)))
     } yield segments
   }
